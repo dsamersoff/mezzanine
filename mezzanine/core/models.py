@@ -22,6 +22,10 @@ from mezzanine.utils.models import base_concrete_model, get_user_model_name
 from mezzanine.utils.sites import current_request, current_site_id
 from mezzanine.utils.urls import admin_url, slugify, unique_slug
 
+# DMS
+import datetime
+import random
+
 user_model_name = get_user_model_name()
 
 
@@ -36,6 +40,53 @@ def wrapped_manager(klass):
     else:
         return klass()
 
+
+# Mapping of Cyrillic characters to Latin transliterations
+transliteration_dict = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
+    'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+    'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+    'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+    'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+    'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'Yo',
+    'Ж': 'Zh', 'З': 'Z', 'И': 'I', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M',
+    'Н': 'N', 'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U',
+    'Ф': 'F', 'Х': 'Kh', 'Ц': 'Ts', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Sch',
+    'Ъ': '', 'Ы': 'Y', 'Ь': '', 'Э': 'E', 'Ю': 'Yu', 'Я': 'Ya'
+}
+
+def to_latin(text):
+    transliterated_text = ''
+    for char in text:
+        if char.isalnum():
+          transliterated_text += transliteration_dict.get(char, char)
+    return transliterated_text.lower()
+
+def id_for_slug():
+    now = datetime.datetime.now()
+    current_year = now.year
+    seconds_since_start = (now - datetime.datetime(now.year, 1, 1)).total_seconds()
+    adj = random.randint(1, 99)
+    return current_year - 2000, adj, int(seconds_since_start)
+
+def dms_make_slug(title_to_slug):
+    """ Generate nice slug:
+        1. Convert russian to latin
+        2. Convert poetry *** to word "poetry"
+        3. Take only one or two words from title
+        4. Append year and number of seconds since start of the year as hex
+    """
+    if title_to_slug.startswith("*"):
+        title_to_slug = "poetry"
+    else:
+        """Get first and second words from title"""
+        words = title_to_slug.split()
+        title_to_slug = words[0]
+        if(len(words) > 1 and len(title_to_slug) < 4):
+          title_to_slug += "-%s" % words[1]
+        title_to_slug = to_latin(title_to_slug)
+    title_to_slug += "-%d%d%x" % id_for_slug()
+    return title_to_slug
 
 class SiteRelated(models.Model):
     """
@@ -111,9 +162,10 @@ class Slugged(SiteRelated):
             from modeltranslation.utils import build_localized_fieldname
 
             attr = build_localized_fieldname(attr, settings.LANGUAGE_CODE)
-        # Get self.title_xx where xx is the default language, if any.
-        # Get self.title otherwise.
-        return slugify(getattr(self, attr, None) or self.title)
+
+        title_to_slug = getattr(self, attr, None) or self.title
+        title_to_slug = dms_make_slug(title_to_slug)
+        return slugify(title_to_slug)
 
     def admin_link(self):
         return format_html(
