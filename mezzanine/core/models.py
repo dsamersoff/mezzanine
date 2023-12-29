@@ -250,7 +250,7 @@ class MetaData(models.Model):
                 description = TagCloser(description[:pos]).html
                 break
         else:
-            description = truncatewords_html(description, 100)
+            description = truncatewords_html(description, 300)
         try:
             description = unicode(description)
         except NameError:
